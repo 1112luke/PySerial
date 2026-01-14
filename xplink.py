@@ -19,6 +19,10 @@ class xp_msg_t(Enum):
     PRESSURE10 = 15
     PRESSURE11 = 16
     PRESSURE12 = 17
+    THRUST = 18
+    SOLENOID = 19
+    XP_STATE = 20
+    SWITCHES = 21
 
 class xp_packet_t:
     def __init__(self):
@@ -52,8 +56,8 @@ class XPLink:
 
             read_head += read_step
 
-        return output  
-                
+        return output
+
     def XPLINK_UNPACK(self, byte):
         try:
             #reset buffer if previously got an end byte
@@ -61,7 +65,7 @@ class XPLink:
                 self.PREV_END = 0
                 self.buffer = []
 
-            #add byte to buffer    
+            #add byte to buffer
             self.buffer.append(byte)
 
             #collect buffer if end byte
@@ -80,16 +84,16 @@ class XPLink:
                 if(actual!= expected):
                     print("CHECKSUM DOES NOT MATCH\n")
                     return 0
-                
+
                 return packet
         except:
             print("[XPLink] Error Parsing Byte\n")
         return 0
-    
+
     def XPLINK_PACK(self, xppack: xp_packet_t) -> list[12]:
 
         packet = [0] * 10
-        
+
         # SENDER ID
         packet[0] = xppack.sender_id
 
@@ -98,18 +102,18 @@ class XPLink:
 
         for i in range(7):
             packet[2+i] = (xppack.data >> (i*8)) & 0xFF
-        
+
         sum1 = sum(packet[0:9])
 
         packet[9] = sum1 % 256
 
-        return self.COBS_PACK(packet)
+        return self.COBS_PACK(packet)[0:12]
 
-    
+
     def COBS_PACK(self, input: list[10]) -> list[12]:
         curr_idx = 0
         output = [0]*13
-        
+
         for i in range(len(input)):
 
             if(input[i] == self.END_BYTE):
@@ -117,10 +121,10 @@ class XPLink:
                 curr_idx = i+1
             else:
                 output[i+1] = input[i]
-            
+
             if(i == len(input) - 1):
                 output[curr_idx] = (i-curr_idx) + 2
-            
+
         output[len(input) + 1] = self.END_BYTE
 
         return output
