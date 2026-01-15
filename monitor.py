@@ -3,9 +3,10 @@ import time
 from threading import Thread
 from rich import print
 from rich.console import Console
-from pynput.keyboard import Listener, Key
+#from pynput.keyboard import Listener, Key
 from xplink import *
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import json, random, asyncio
 
@@ -13,7 +14,7 @@ import json, random, asyncio
 #make console
 console = Console()
 
-ser = serial.Serial('/dev/tty.usbserial-110', 1000000)  # open serial port
+ser = serial.Serial('/dev/tty.usbserial-10', 460800)  # open serial port
 
 recievedBytes = 0
 start_time = 0
@@ -23,101 +24,153 @@ xp = XPLink()
 alphadata = {
     "temps": [None] * 4,
     "pressures": [None] * 12,
-    "going": 0
+    "thrusts": [None] * 1,
+    "solenoids":[None]*4,
+    "acc":[None]*3,
+    "keys":[None] * 1,
+    "burn": [None] * 1,
+    "going": 0,
+    "state": 0,
 }
 
 def recieve():
-    
+
     while(1):
-        
+
         bytes = ser.read()
         packet = xp.XPLINK_UNPACK(bytes[0])
         if(packet):
             #print([hex(pac) for pac in packet.data])
             match xp_msg_t(packet.type).name:
+                case "ACC":
+                    z_raw = (packet.data[1] << 8) |packet.data[0]
+                    y_raw = (packet.data[3] << 8) |packet.data[2]
+                    x_raw = (packet.data[5] << 8) |packet.data[4]
+                    
+                    # Convert to signed 16-bit
+                    if z_raw > 32767:
+                        z_raw -= 65536
+                    if y_raw > 32767:
+                        y_raw -= 65536
+                    if x_raw > 32767:
+                        x_raw -= 65536
+                    
+                    # Convert from 1/16th degree to actual degrees
+                    heading = x_raw / 16.0 
+                    roll = y_raw / 16.0   
+                    pitch = z_raw / 16.0   
+
+                    alphadata["acc"][0] = heading
+                    alphadata["acc"][1] = roll
+                    alphadata["acc"][2] = pitch
+
                 case "TEMP1":
                     celcius = packet.data[3]<<24 | packet.data[2]<<16 | packet.data[1]<<8 | packet.data[0]
-                    print("TEMP1: ", celcius*1e-4*(9/5)+32)
+                    #print("TEMP1: ", celcius*1e-4*(9/5)+32)
                     alphadata["temps"][0] = celcius*1e-4*(9/5)+32
                 case "TEMP2":
                     celcius = packet.data[3]<<24 | packet.data[2]<<16 | packet.data[1]<<8 | packet.data[0]
-                    print("TEMP2: ", celcius*1e-4*(9/5)+32)
+                    #print("TEMP2: ", celcius*1e-4*(9/5)+32)
                     alphadata["temps"][1] = celcius*1e-4*(9/5)+32
                 case "TEMP3":
                     celcius = packet.data[3]<<24 | packet.data[2]<<16 | packet.data[1]<<8 | packet.data[0]
-                    print("TEMP3: ", celcius*1e-4*(9/5)+32)
+                    #print("TEMP3: ", celcius*1e-4*(9/5)+32)
                     alphadata["temps"][2] = celcius*1e-4*(9/5)+32
                 case "TEMP4":
                     celcius = packet.data[3]<<24 | packet.data[2]<<16 | packet.data[1]<<8 | packet.data[0]
-                    print("TEMP4: ", celcius*1e-4*(9/5)+32)
+                    #print("TEMP4: ", celcius*1e-4*(9/5)+32)
                     alphadata["temps"][3] = celcius*1e-4*(9/5)+32
                 case "PRESSURE1":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure1: ", data, end='')
+                    #print("Pressure1: ", data, end='')
                     alphadata["pressures"][0] = data
                 case "PRESSURE2":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure2: ", data, end='')
+                    #print("Pressure2: ", data, end='')
                     alphadata["pressures"][1] = data
                 case "PRESSURE3":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure3: ", data, end='')
+                    #print("Pressure3: ", data, end='')
                     alphadata["pressures"][2] = data
                 case "PRESSURE4":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure4: ", data, end='')
+                    #print("Pressure4: ", data, end='')
                     alphadata["pressures"][3] = data
                 case "PRESSURE5":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure5: ", data, end='')
+                    #print("Pressure5: ", data, end='')
                     alphadata["pressures"][4] = data
                 case "PRESSURE6":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure6: ", data, end='')
+                    #print("Pressure6: ", data, end='')
                     alphadata["pressures"][5] = data
                 case "PRESSURE7":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure7: ", data, end='')
+                    #print("Pressure7: ", data, end='')
                     alphadata["pressures"][6] = data
                 case "PRESSURE8":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure8: ", data, end='')
+                    #print("Pressure8: ", data, end='')
                     alphadata["pressures"][7] = data
                 case "PRESSURE9":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure9: ", data, end='')
+                    #print("Pressure9: ", data, end='')
                     alphadata["pressures"][8] = data
                 case "PRESSURE10":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure10: ", data, end='')
+                    #print("Pressure10: ", data, end='')
                     alphadata["pressures"][9] = data
                 case "PRESSURE11":
                     #print([hex(pac) for pac in pa
                     # cket.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure11: ", data, end='')
+                    #print("Pressure11: ", data, end='')
                     alphadata["pressures"][10] = data
                 case "PRESSURE12":
                     #print([hex(pac) for pac in packet.data])
                     data = packet.data[1]<<8 | packet.data[0]
-                    print("Pressure12: ", data)
+                    #print("Pressure12: ", data)
                     alphadata["pressures"][11] = data
-                    
+                case "THRUST":
+                    #print([hex(pac) for pac in packet.data])
+                    data = packet.data[2] << 16 | packet.data[1] << 8 | packet.data[0]
+                    #print("THRUST:", data)
+                    alphadata["thrusts"][0] = data
+                case "SOLENOID":
+                    #print([hex(pac) for pac in packet.data])
+                    s4 = packet.data[0]
+                    s3 = packet.data[1]
+                    s2 = packet.data[2]
+                    s1 = packet.data[3]
+                    alphadata["solenoids"][0] = s1
+                    alphadata["solenoids"][1] = s2
+                    alphadata["solenoids"][2] = s3
+                    alphadata["solenoids"][3] = s4
+                case "XP_STATE":
+                    #print([hex(pac) for pac in packet.data])
+                    state = packet.data[0]
+                    alphadata["state"] = state
+                case "SWITCHES":
+                    bw = packet.data[0]
+                    k1 = packet.data[1]
+                    alphadata["burn"][0] = bw
+                    alphadata["keys"][0] = k1
+
 
 
             #print("type:", xp_msg_t(packet.type).name)
             #print("sender:", packet.sender_id)
-            
+
 
 
 
@@ -142,7 +195,7 @@ def recieve():
             recievedBytes = 0
     '''
 
-
+'''
 def inthread():
 
     def on_press(key):
@@ -154,10 +207,10 @@ def inthread():
             pkt.sender_id = 0xAA
             pkt.type = 1
             pkt.data = 10
-            
+
             #send packet
             outpacket = xp.XPLINK_PACK(pkt)
-        
+
             #serial transmit
             ser.write(bytes(outpacket))
             print("Transmitted\n")
@@ -168,10 +221,10 @@ def inthread():
             pkt.sender_id = 0xAA
             pkt.type = 1
             pkt.data = 333
-            
+
             #send packet
             outpacket = xp.XPLINK_PACK(pkt)
-        
+
             #serial transmit
             ser.write(bytes(outpacket))
             print("Transmitted\n")
@@ -187,9 +240,17 @@ def inthread():
             on_press=on_press,
             on_release=on_release) as listener:
         listener.join()
-
+'''
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],       # or specify your React URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.websocket("/data")
 async def websocket_endpoint(websocket: WebSocket):
@@ -219,37 +280,31 @@ def timer():
             last_time = time.time()
 
 
+def run_uvicorn():
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=3333,
+        log_level="info",
+        ws="websockets",
+    )
+
 if __name__ == "__main__":
-    # Create main asyncio loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    # Start Uvicorn server as a coroutine
-    async def start_server():
-        # FIX: Pass the actual 'app' object, removing the string reference
-        config = uvicorn.Config(app, host="127.0.0.1", port=3333, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()
-
-    # Schedule the server
-    loop.create_task(start_server())
-
-    # Start threads as daemon
+    # Start serial thread
     t1 = Thread(target=recieve, daemon=True)
-    t3 = Thread(target=inthread, daemon=True)
-
     t1.start()
-    t3.start()
+
+    # Start Uvicorn server in a separate thread
+    t2 = Thread(target=run_uvicorn, daemon=True)
+    t2.start()
 
     print("System Started. Press CTRL+C to stop.")
 
-    # Run the asyncio loop forever
+    # Keep main thread alive
     try:
-        loop.run_forever()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("Shutting down...")
-    finally:
-        # Cleanup
         if ser.is_open:
             ser.close()
-        loop.close()
