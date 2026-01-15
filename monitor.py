@@ -199,6 +199,9 @@ async def websocket_endpoint(websocket: WebSocket):
         data = alphadata.copy()
         data["temps"] = alphadata["temps"][:]
         data["pressures"] = alphadata["pressures"][:]
+
+        data["timestamp"] = time.time()
+        
         await websocket.send_text(json.dumps(data))
         #stream at 250 hz
         await asyncio.sleep(1/250)
