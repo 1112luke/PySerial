@@ -291,7 +291,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         "time": time.time()
                     }
                     await websocket.send_text(json.dumps(data))
-                    await asyncio.sleep(1/100)
         except Exception as e:
             print(f"Sending Error: {e}")
 
