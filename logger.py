@@ -18,11 +18,11 @@ def log_data():
                 try:
                     data = json.loads(message)
                     current_state = data.get('state')
-                    
+                  
                     # Check if we should start logging (leaving standby state)
                     if not is_logging and current_state != 0:
                         # Create new file with timestamp
-                        filename = f"telemetry_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        filenhow wame = f"telemetry_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
                         csv_file = open(filename, mode='w', newline='')
                         writer = None
                         message_count = 0

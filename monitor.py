@@ -262,26 +262,45 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
     # Send via websocket
-    async def send_telemetry():
-        try:
-            while True:
-                # Create local copy to avoid threading issues
-                data = {
-                    "temps": alphadata["temps"][:],
-                    "pressures": alphadata["pressures"][:],
-                    "thrusts": alphadata["thrusts"][:],
-                    "solenoids": alphadata["solenoids"][:],
-                    "acc": alphadata["acc"][:],
-                    "keys": alphadata["keys"][:],
-                    "burn": alphadata["burn"][:],
-                    "going": alphadata["going"],
-                    "state": alphadata["state"],
-                    "time": time.time()
-                }
-                await websocket.send_text(json.dumps(data))
-                await asyncio.sleep(1/100)
-        except Exception as e:
-            print(f"Sending Error: {e}")
+    
+async def send_telemetry():
+    interval = 1.0 / 100.0  # 10ms
+    next_time = asyncio.get_event_loop().time()
+    
+    try:
+        while True:
+            # Create local copy
+            data = {
+                "temps": alphadata["temps"][:],
+                "pressures": alphadata["pressures"][:],
+                "thrusts": alphadata["thrusts"][:],
+                "solenoids": alphadata["solenoids"][:],
+                "acc": alphadata["acc"][:],
+                "keys": alphadata["keys"][:],
+                "burn": alphadata["burn"][:],
+                "going": alphadata["going"],
+                "state": alphadata["state"],
+                "time": time.time()
+            }
+            
+            await websocket.send_text(json.dumps(data))
+            
+            # Update when the NEXT packet should go out
+            next_time += interval
+            
+            # Calculate how much time is left until that next boundary
+            sleep_time = next_time - asyncio.get_event_loop().time()
+            
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            else:
+                # We are running behind schedule (processing took > 10ms)
+                # Reset next_time to "now" so we don't try to "catch up" 
+                # by spamming packets.
+                next_time = asyncio.get_event_loop().time()
+                
+    except Exception as e:
+        print(f"Sending Error: {e}")
     
     # Receive via websocket
     async def receive_commands():
