@@ -271,26 +271,41 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Send via websocket
     async def send_telemetry():
-        last_time = time.time()
+        
+        interval = 0.01  # 100Hz
+        next_time = time.time() + interval
+
         try:
             while True:
-                # Run at 100hz
-                if(time.time() - last_time >= 0.01):
-                    last_time += 0.01
-                    # Create local copy to avoid threading issues
-                    data = {
-                        "temps": alphadata["temps"][:],
-                        "pressures": alphadata["pressures"][:],
-                        "thrusts": alphadata["thrusts"][:],
-                        "solenoids": alphadata["solenoids"][:],
-                        "acc": alphadata["acc"][:],
-                        "keys": alphadata["keys"][:],
-                        "burn": alphadata["burn"][:],
-                        "going": alphadata["going"],
-                        "state": alphadata["state"],
-                        "time": time.time()
-                    }
-                    await websocket.send_text(json.dumps(data))
+                now = time.time()
+            
+                # Prepare and send data
+                data = {
+                    "temps": alphadata["temps"][:],
+                    "pressures": alphadata["pressures"][:],
+                    "thrusts": alphadata["thrusts"][:],
+                    "solenoids": alphadata["solenoids"][:],
+                    "acc": alphadata["acc"][:],
+                    "keys": alphadata["keys"][:],
+                    "burn": alphadata["burn"][:],
+                    "going": alphadata["going"],
+                    "state": alphadata["state"],
+                    "time": now
+                }
+                
+                await websocket.send_json(data)
+
+                # calculate next time
+                next_time += interval
+                sleep_time = next_time - time.time()
+                
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+                else:
+                    #reset if running behind
+                    next_time = time.time()
+                    await asyncio.sleep(0)
+                    
         except Exception as e:
             print(f"Sending Error: {e}")
 
